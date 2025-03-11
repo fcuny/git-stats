@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv package manager (latest version)
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Execute Ruff linting check
+        run: uvx ruff check
+
+      - name: Run tests
+        run: uv run pytest
+
+      - name: Test git-stats commands
+        run: |
+          uv run git-stats --help
+          uv run git-stats stats
+          uv run git-stats dris
