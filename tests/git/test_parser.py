@@ -2,14 +2,11 @@
 Tests for the Git log parser module.
 """
 
-import os
-from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from git_stats.git.parser import (
-    Commit,
     calculate_author_stats,
     calculate_file_stats,
     extract_commit_info,

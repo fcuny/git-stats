@@ -10,9 +10,6 @@ import pytest
 
 from git_stats.git.repository import (
     get_commit_history,
-    get_current_branch,
-    get_file_blame,
-    get_file_history,
     get_file_type,
     run_git_command,
     validate_repo,

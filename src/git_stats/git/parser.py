@@ -7,7 +7,7 @@ relevant information about commits, authors, and file changes.
 
 import re
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Union
 
 
 class Commit:

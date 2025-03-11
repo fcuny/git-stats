@@ -8,9 +8,7 @@ including validating repositories, running Git commands, and retrieving commit h
 import os
 import subprocess
 from datetime import datetime
-from typing import List, Optional, Tuple, Union
-
-from rich.console import Console
+from typing import Optional, Union
 
 
 def validate_repo(repo_path: str) -> bool:

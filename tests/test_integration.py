@@ -3,10 +3,8 @@ Integration tests for the git-stats package.
 """
 
 import os
-import subprocess
 from unittest import mock
 
-import pytest
 
 from git_stats.git import (
     Commit,
