@@ -9,10 +9,18 @@ import os
 from typing import Dict, List, Optional, Tuple
 
 from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
+from rich.text import Text
 
 from git_stats.config import OutputFormat
+from git_stats.formatting import (
+    create_command_panel,
+    create_console,
+    create_experts_table,
+    create_overall_experts_table,
+    create_score_bar,
+    format_expertise_level,
+    get_expertise_level,
+)
 from git_stats.git import repository, parser
 from git_stats.scoring import rank_contributors
 
@@ -45,7 +53,7 @@ def get_file_experts(
     repo_path: str, file_path: str, recency_period: int
 ) -> List[Tuple[str, float, Dict[str, float]]]:
     """
-    Get experts for a specific file.
+    Get the experts for a specific file.
 
     Args:
         repo_path: Path to the Git repository
@@ -53,26 +61,40 @@ def get_file_experts(
         recency_period: Recency period in months
 
     Returns:
-        List of tuples (contributor, score, normalized_metrics) sorted by score
+        List of tuples (author, score, normalized_metrics)
     """
     try:
-        # Get file history
-        log_output = repository.get_file_history(
+        # Get git log for the file
+        git_log = repository.get_file_history(
             repo_path=repo_path,
             file_path=file_path,
             ignore_merges=True,
         )
 
-        # Parse file history
-        commits = parser.parse_git_log(log_output)
+        # Parse git log
+        commits = parser.parse_git_log(git_log)
 
-        # Group commits by author
-        author_commits = parser.group_commits_by_author(commits)
-
-        # Calculate stats for each author
+        # Calculate author statistics
         author_stats = {}
-        for author, author_commits_list in author_commits.items():
-            author_stats[author] = parser.calculate_author_stats(commits, author)
+        for commit in commits:
+            author = commit.author
+            if author not in author_stats:
+                author_stats[author] = {
+                    "total_commits": 0,
+                    "total_lines_added": 0,
+                    "total_lines_deleted": 0,
+                    "first_commit_date": commit.date,
+                    "last_commit_date": commit.date,
+                }
+
+            author_stats[author]["total_commits"] += 1
+            author_stats[author]["total_lines_added"] += commit.total_lines_added
+            author_stats[author]["total_lines_deleted"] += commit.total_lines_deleted
+
+            if commit.date < author_stats[author]["first_commit_date"]:
+                author_stats[author]["first_commit_date"] = commit.date
+            if commit.date > author_stats[author]["last_commit_date"]:
+                author_stats[author]["last_commit_date"] = commit.date
 
         # Rank contributors
         ranking = rank_contributors(author_stats, recency_period_months=recency_period)
@@ -80,24 +102,6 @@ def get_file_experts(
         return ranking
     except Exception:
         return []
-
-
-def determine_expertise_level(score: float) -> str:
-    """
-    Determine expertise level based on score.
-
-    Args:
-        score: Contributor score
-
-    Returns:
-        Expertise level (High, Medium, Low)
-    """
-    if score >= 0.7:
-        return "High"
-    elif score >= 0.4:
-        return "Medium"
-    else:
-        return "Low"
 
 
 def execute(
@@ -123,21 +127,17 @@ def execute(
         Exit code (0 for success, non-zero for errors)
     """
     if console is None:
-        console = Console()
+        console = create_console()
 
     # Display command parameters
-    console.print(
-        Panel(
-            f"[bold]Git DRIs[/bold]\n\n"
-            f"Repository: [cyan]{repo_path}[/cyan]\n"
-            f"Recency period: [cyan]{recency_period} months[/cyan]\n"
-            f"Output format: [cyan]{output_format.name.lower()}[/cyan]\n"
-            f"Top experts: [cyan]{top}[/cyan]"
-            + (f"\nFiles: [cyan]{', '.join(files)}[/cyan]" if files else ""),
-            title="DRIs Command",
-            expand=False,
-        )
-    )
+    parameters = {
+        "repository": repo_path,
+        "recency_period": f"{recency_period} months",
+        "output_format": output_format.name.lower(),
+        "top_experts": top,
+        "files": files,
+    }
+    console.print(create_command_panel("DRIs Command", "Git DRIs", parameters))
 
     # Validate repository
     if not repository.validate_repo(repo_path):
@@ -148,6 +148,7 @@ def execute(
 
     # If no files specified, use current diff
     if not files:
+        console.print("[bold blue]Detecting changed files...[/bold blue]")
         files = get_current_diff_files(repo_path)
         if not files:
             console.print(
@@ -159,7 +160,7 @@ def execute(
     valid_files = []
     for file_path in files:
         full_path = os.path.join(repo_path, file_path)
-        if os.path.exists(full_path) and not os.path.isdir(full_path):
+        if os.path.exists(full_path) and os.path.isfile(full_path):
             valid_files.append(file_path)
         else:
             console.print(f"[yellow]Warning:[/yellow] File not found: {file_path}")
@@ -169,24 +170,28 @@ def execute(
         return 1
 
     # Get experts for each file
+    console.print(f"[bold blue]Analyzing {len(valid_files)} files...[/bold blue]")
     file_experts = {}
+    overall_scores = {}
+
     for file_path in valid_files:
+        console.print(f"[blue]Analyzing: {file_path}[/blue]")
+        # Get experts for the file
         experts = get_file_experts(repo_path, file_path, recency_period)
         file_experts[file_path] = experts[:top]  # Limit to top N experts
 
-    # Calculate overall experts across all files
-    overall_scores = {}
-    for file_path, experts in file_experts.items():
+        # Update overall scores
         for author, score, _ in experts:
-            if author not in overall_scores:
-                overall_scores[author] = 0
-            overall_scores[author] += score
+            if author in overall_scores:
+                overall_scores[author] += score
+            else:
+                overall_scores[author] = score
 
-    # Normalize overall scores
+    # Calculate overall experts
     if overall_scores:
-        max_score = max(overall_scores.values())
         overall_experts = [
-            (author, score / max_score) for author, score in overall_scores.items()
+            (author, score / len(valid_files))
+            for author, score in overall_scores.items()
         ]
         overall_experts.sort(key=lambda x: x[1], reverse=True)
         overall_experts = overall_experts[:top]
@@ -201,7 +206,7 @@ def execute(
                 {
                     "author": author,
                     "score": score,
-                    "expertise_level": determine_expertise_level(score),
+                    "expertise_level": get_expertise_level(score).label,
                 }
                 for author, score in overall_experts
             ],
@@ -212,7 +217,7 @@ def execute(
                 {
                     "author": author,
                     "score": score,
-                    "expertise_level": determine_expertise_level(score),
+                    "expertise_level": get_expertise_level(score).label,
                     "normalized_metrics": normalized_metrics,
                 }
                 for author, score, normalized_metrics in experts
@@ -220,40 +225,60 @@ def execute(
 
         console.print(json.dumps(result, indent=2))
     else:
-        # Create table for file experts
-        table = Table(title="File Experts")
-        table.add_column("File", style="cyan")
-        table.add_column("Expert", style="magenta")
-        table.add_column("Score", justify="right")
-        table.add_column("Expertise Level", justify="center")
-
-        # Add data to table
+        # Group files by directory for better organization
+        file_groups = {}
         for file_path, experts in file_experts.items():
-            if not experts:
-                table.add_row(file_path, "No experts found", "", "")
-                continue
+            directory = os.path.dirname(file_path) or "."
+            if directory not in file_groups:
+                file_groups[directory] = {}
+            file_groups[directory][file_path] = experts
 
-            for i, (author, score, _) in enumerate(experts):
-                expertise_level = determine_expertise_level(score)
-                if i == 0:
-                    table.add_row(file_path, author, f"{score:.2f}", expertise_level)
-                else:
-                    table.add_row("", author, f"{score:.2f}", expertise_level)
+        # Create tables for each directory
+        for directory, files in file_groups.items():
+            # Create table for file experts
+            table = create_experts_table(f"File Experts - {directory}")
 
-        console.print(table)
+            for file_path, experts in files.items():
+                # Get just the filename without the directory
+                filename = os.path.basename(file_path)
+
+                if not experts:
+                    table.add_row(filename, "No experts found", "", "")
+                    continue
+
+                for i, (author, score, _) in enumerate(experts):
+                    # Create score visualization
+                    score_bar = create_score_bar(score)
+
+                    # Format expertise level
+                    expertise_text = format_expertise_level(score)
+
+                    if i == 0:
+                        table.add_row(filename, author, str(score_bar), expertise_text)
+                    else:
+                        table.add_row("", author, str(score_bar), expertise_text)
+
+            console.print(table)
+            console.print()
 
         # Create table for overall experts
         if overall_experts:
-            overall_table = Table(title="Overall Experts")
-            overall_table.add_column("Expert", style="magenta")
-            overall_table.add_column("Score", justify="right")
-            overall_table.add_column("Expertise Level", justify="center")
+            overall_table = create_overall_experts_table()
 
             for author, score in overall_experts:
-                expertise_level = determine_expertise_level(score)
-                overall_table.add_row(author, f"{score:.2f}", expertise_level)
+                # Create score visualization
+                score_bar = create_score_bar(score)
 
-            console.print("\n")
+                # Format expertise level
+                expertise_text = format_expertise_level(score)
+
+                overall_table.add_row(author, str(score_bar), expertise_text)
+
             console.print(overall_table)
+
+        # Print summary
+        console.print()
+        console.print(f"[bold]Total Files Analyzed:[/bold] {len(valid_files)}")
+        console.print(f"[bold]Total Experts Shown:[/bold] {top}")
 
     return 0

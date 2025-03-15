@@ -8,10 +8,17 @@ import json
 from typing import Optional
 
 from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
 
 from git_stats.config import OutputFormat
+from git_stats.formatting import (
+    create_command_panel,
+    create_console,
+    create_score_bar,
+    create_stats_table,
+    format_expertise_level,
+    format_longevity,
+    get_rank_style,
+)
 from git_stats.git import repository, parser
 from git_stats.scoring import rank_contributors
 
@@ -43,23 +50,19 @@ def execute(
         Exit code (0 for success, non-zero for errors)
     """
     if console is None:
-        console = Console()
+        console = create_console()
 
     # Display command parameters
-    console.print(
-        Panel(
-            f"[bold]Git Stats[/bold]\n\n"
-            f"Repository: [cyan]{repo_path}[/cyan]\n"
-            f"Recency period: [cyan]{recency_period} months[/cyan]\n"
-            f"Output format: [cyan]{output_format.name.lower()}[/cyan]"
-            + (f"\nPath filter: [cyan]{path}[/cyan]" if path else "")
-            + (f"\nLanguage filter: [cyan]{language}[/cyan]" if language else "")
-            + (f"\nSince: [cyan]{since}[/cyan]" if since else "")
-            + (f"\nUntil: [cyan]{until}[/cyan]" if until else ""),
-            title="Stats Command",
-            expand=False,
-        )
-    )
+    parameters = {
+        "repository": repo_path,
+        "recency_period": f"{recency_period} months",
+        "output_format": output_format.name.lower(),
+        "path_filter": path,
+        "language_filter": language,
+        "since": since,
+        "until": until,
+    }
+    console.print(create_command_panel("Stats Command", "Git Stats", parameters))
 
     # Validate repository
     if not repository.validate_repo(repo_path):
@@ -68,56 +71,57 @@ def execute(
         )
         return 1
 
-    # Get commit history
-    try:
-        log_output = repository.get_commit_history(
-            repo_path=repo_path,
-            path=path,
-            since=since,
-            until=until,
-            ignore_merges=True,
-        )
-    except Exception as e:
-        console.print(
-            f"[bold red]Error:[/bold red] Failed to get commit history: {str(e)}"
-        )
-        return 1
+    # Get git log
+    console.print("[bold blue]Fetching git log...[/bold blue]")
+    git_log = repository.get_commit_history(
+        repo_path=repo_path,
+        path=path,
+        since=since,
+        until=until,
+        ignore_merges=True,
+    )
 
-    # Parse commit history
-    commits = parser.parse_git_log(log_output)
+    # Parse git log
+    console.print("[bold blue]Parsing git log...[/bold blue]")
+    commits = parser.parse_git_log(git_log)
 
     # Filter by language if specified
     if language:
-        filtered_commits = []
-        for commit in commits:
-            language_files = [
-                file
-                for file in commit.files
-                if repository.get_file_type(repo_path, file["path"]) == language
-            ]
-            if language_files:
-                # Create a new commit with only the filtered files
-                filtered_commit = parser.Commit(
-                    hash=commit.hash,
-                    author_name=commit.author_name,
-                    author_email=commit.author_email,
-                    date=commit.date,
-                    subject=commit.subject,
-                    body=commit.body,
-                    files=language_files,
-                )
-                filtered_commits.append(filtered_commit)
-        commits = filtered_commits
+        console.print(f"[bold blue]Filtering by language: {language}...[/bold blue]")
+        commits = [
+            commit
+            for commit in commits
+            if any(
+                file_path.get("path", "").endswith(f".{language}")
+                for file_path in commit.files
+            )
+        ]
 
-    # Group commits by author
-    author_commits = parser.group_commits_by_author(commits)
-
-    # Calculate stats for each author
+    # Calculate author statistics
+    console.print("[bold blue]Calculating statistics...[/bold blue]")
     author_stats = {}
-    for author, author_commits_list in author_commits.items():
-        author_stats[author] = parser.calculate_author_stats(commits, author)
+    for commit in commits:
+        author = commit.author
+        if author not in author_stats:
+            author_stats[author] = {
+                "total_commits": 0,
+                "total_lines_added": 0,
+                "total_lines_deleted": 0,
+                "first_commit_date": commit.date,
+                "last_commit_date": commit.date,
+            }
+
+        author_stats[author]["total_commits"] += 1
+        author_stats[author]["total_lines_added"] += commit.total_lines_added
+        author_stats[author]["total_lines_deleted"] += commit.total_lines_deleted
+
+        if commit.date < author_stats[author]["first_commit_date"]:
+            author_stats[author]["first_commit_date"] = commit.date
+        if commit.date > author_stats[author]["last_commit_date"]:
+            author_stats[author]["last_commit_date"] = commit.date
 
     # Rank contributors
+    console.print("[bold blue]Ranking contributors...[/bold blue]")
     ranking = rank_contributors(author_stats, recency_period_months=recency_period)
 
     if output_format == OutputFormat.JSON:
@@ -147,14 +151,7 @@ def execute(
         console.print(json.dumps(result, indent=2))
     else:
         # Create table for text output
-        table = Table(title="Contribution Statistics")
-        table.add_column("Rank", style="dim")
-        table.add_column("Contributor", style="cyan")
-        table.add_column("Score", style="magenta")
-        table.add_column("Commits", justify="right")
-        table.add_column("Lines", justify="right")
-        table.add_column("Longevity", justify="right")
-        table.add_column("Recency", justify="right")
+        table = create_stats_table()
 
         # Add data to table
         for i, (author, score, normalized_metrics) in enumerate(ranking, 1):
@@ -164,9 +161,7 @@ def execute(
             longevity = ""
             if "first_commit_date" in stats and "last_commit_date" in stats:
                 days = (stats["last_commit_date"] - stats["first_commit_date"]).days
-                years = days // 365
-                months = (days % 365) // 30
-                longevity = f"{years}y {months}m" if years > 0 else f"{months}m"
+                longevity = format_longevity(days)
 
             # Calculate total lines
             total_lines = stats.get("total_lines_added", 0) + stats.get(
@@ -176,16 +171,34 @@ def execute(
             # Format recency as percentage
             recency_pct = f"{normalized_metrics.get('recency', 0) * 100:.0f}%"
 
+            # Create score visualization
+            score_bar = create_score_bar(score)
+
+            # Apply rank styling
+            rank_style = get_rank_style(i)
+            rank_text = f"[{rank_style}]{i}[/{rank_style}]"
+
             table.add_row(
-                str(i),
+                rank_text,
                 author,
-                f"{score:.2f}",
+                str(score_bar),
                 str(stats.get("total_commits", 0)),
                 str(total_lines),
                 longevity,
                 recency_pct,
             )
 
+        # Print summary statistics
+        console.print()
+        console.print(f"[bold]Total Contributors:[/bold] {len(ranking)}")
+        console.print(f"[bold]Total Commits:[/bold] {len(commits)}")
+
+        if path:
+            console.print(f"[bold]Path Filter:[/bold] {path}")
+        if language:
+            console.print(f"[bold]Language Filter:[/bold] {language}")
+
+        console.print()
         console.print(table)
 
     return 0

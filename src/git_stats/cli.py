@@ -12,10 +12,9 @@ import os
 import sys
 from typing import List, Optional
 
-from rich.console import Console
-
 from git_stats.commands import dris, stats
 from git_stats.config import OutputFormat
+from git_stats.formatting import create_console
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -66,10 +65,7 @@ def create_parser() -> argparse.ArgumentParser:
     dris_parser = subparsers.add_parser(
         "dris", help="Identify experts for specific files"
     )
-    dris_parser.add_argument(
-        "--files",
-        help="Comma-separated list of files to analyze (default: all files in current diff)",
-    )
+    dris_parser.add_argument("--files", help="Comma-separated list of files to analyze")
     dris_parser.add_argument(
         "--top", type=int, default=3, help="Number of experts to recommend (default: 3)"
     )
@@ -90,7 +86,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = create_parser()
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])
 
-    console = Console()
+    # Create console with rich formatting
+    console = create_console()
 
     # Convert output format string to enum
     output_format = OutputFormat.TEXT
