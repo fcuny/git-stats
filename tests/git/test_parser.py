@@ -63,9 +63,9 @@ class TestExtractCommitInfo:
     def test_extract_valid_commit(self):
         """Test extracting information from a valid commit."""
         commit_data = """abcdef1234567890abcdef1234567890abcdef12
-Alice Developer
-alice@example.com
-2023-01-15T10:30:45+00:00
+Author: Alice Developer <alice@example.com>
+Date: 2023-01-15T10:30:45+00:00
+
 Add initial implementation of feature X
 
 This commit adds the initial implementation of feature X,
@@ -94,8 +94,7 @@ which includes:
         """Test extracting information from an invalid commit."""
         # Not enough lines
         commit_data = """abcdef1234567890abcdef1234567890abcdef12
-Alice Developer
-alice@example.com"""
+Author: Alice Developer <alice@example.com>"""
 
         commit = extract_commit_info(commit_data)
         assert commit is None

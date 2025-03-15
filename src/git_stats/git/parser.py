@@ -82,13 +82,23 @@ def parse_git_log(log_output: str) -> List[Commit]:
         return []
 
     commits = []
-    commit_blocks = log_output.split("\n---\n")
 
-    for block in commit_blocks:
-        if not block.strip():
-            continue
+    # Split the log output by commit
+    # Git log with --numstat format has a blank line followed by numstat output
+    # between commits, so we need to find the commit boundaries
+    commit_pattern = re.compile(r"^[0-9a-f]{40}$", re.MULTILINE)
+    commit_positions = [m.start() for m in commit_pattern.finditer(log_output)]
 
-        commit = extract_commit_info(block)
+    # Add the end of the string as the last position
+    commit_positions.append(len(log_output))
+
+    # Extract each commit
+    for i in range(len(commit_positions) - 1):
+        start = commit_positions[i]
+        end = commit_positions[i + 1]
+        commit_data = log_output[start:end].strip()
+
+        commit = extract_commit_info(commit_data)
         if commit:
             commits.append(commit)
 
@@ -110,32 +120,100 @@ def extract_commit_info(commit_data: str) -> Optional[Commit]:
         return None
 
     # Extract commit metadata
-    hash = lines[0]
-    author_name = lines[1]
-    author_email = lines[2]
+    hash_line = lines[0]
+    if not hash_line:
+        return None
+
+    hash = hash_line.strip()
+
+    # Parse author information
+    author_line = None
+    for line in lines[1:4]:  # Look in the first few lines
+        if line.startswith("Author:"):
+            author_line = line[7:].strip()  # Remove "Author: " prefix
+            break
+
+    if not author_line:
+        # Fallback to old format or use placeholder
+        author_name = lines[1] if len(lines) > 1 else "Unknown"
+        author_email = lines[2] if len(lines) > 2 else "unknown@example.com"
+    else:
+        # Parse author line in format "Name <email>"
+        match = re.match(r"^(.*?)\s*<([^>]+)>$", author_line)
+        if match:
+            author_name = match.group(1).strip()
+            author_email = match.group(2).strip()
+        else:
+            # If format doesn't match, use the whole line as name
+            author_name = author_line
+            author_email = "unknown@example.com"
+
+    # Parse date
+    date_line = None
+    for line in lines[1:6]:  # Look in the first few lines
+        if line.startswith("Date:"):
+            date_line = line[5:].strip()  # Remove "Date: " prefix
+            break
 
     try:
-        date = datetime.fromisoformat(lines[3])
-    except ValueError:
-        # Fall back to a simple date format if ISO format fails
-        try:
-            date = datetime.strptime(lines[3], "%Y-%m-%d %H:%M:%S %z")
-        except ValueError:
-            # If all else fails, use current time
-            date = datetime.now()
+        if date_line:
+            # Try various date formats
+            try:
+                date = datetime.fromisoformat(date_line)
+            except ValueError:
+                try:
+                    # Git's default format: "Thu Mar 7 12:34:56 2024 -0700"
+                    date = datetime.strptime(date_line, "%a %b %d %H:%M:%S %Y %z")
+                except ValueError:
+                    try:
+                        # Simple format
+                        date = datetime.strptime(date_line, "%Y-%m-%d %H:%M:%S %z")
+                    except ValueError:
+                        date = datetime.now()
+        else:
+            # Fallback to old format or use current time
+            try:
+                date = (
+                    datetime.fromisoformat(lines[3])
+                    if len(lines) > 3
+                    else datetime.now()
+                )
+            except ValueError:
+                date = datetime.now()
+    except Exception:
+        # If all parsing fails, use current time
+        date = datetime.now()
 
-    subject = lines[4] if len(lines) > 4 else ""
+    # Find subject and body
+    subject = ""
+    body = ""
+    body_start = 0
+
+    # Find the first non-empty line after the metadata
+    metadata_end = 0
+    for i, line in enumerate(lines):
+        if line.startswith("Author:") or line.startswith("Date:"):
+            metadata_end = i + 1
+
+    # Skip empty lines after metadata
+    while metadata_end < len(lines) and not lines[metadata_end].strip():
+        metadata_end += 1
+
+    # The next non-empty line is the subject
+    if metadata_end < len(lines):
+        subject = lines[metadata_end].strip()
+        body_start = metadata_end + 1
 
     # Find where the file stats begin
-    body_end = 5
-    while body_end < len(lines) and not (
-        lines[body_end] == ""
-        and body_end + 1 < len(lines)
-        and re.match(r"^\d+\s+\d+\s+", lines[body_end + 1])
-    ):
+    body_end = body_start
+    while body_end < len(lines):
+        # Look for the start of numstat output (lines with format: <added> <deleted> <file>)
+        if re.match(r"^\d+\s+\d+\s+\S", lines[body_end].strip()):
+            break
         body_end += 1
 
-    body = "\n".join(lines[5:body_end]).strip()
+    if body_start < body_end:
+        body = "\n".join(lines[body_start:body_end]).strip()
 
     # Extract file changes
     files = extract_file_changes(lines[body_end:])
@@ -163,7 +241,12 @@ def extract_file_changes(file_lines: List[str]) -> List[Dict[str, Union[str, int
     """
     files = []
 
-    for line in file_lines:
+    # Skip empty lines at the beginning
+    start_idx = 0
+    while start_idx < len(file_lines) and not file_lines[start_idx].strip():
+        start_idx += 1
+
+    for line in file_lines[start_idx:]:
         line = line.strip()
         if not line:
             continue
@@ -171,6 +254,7 @@ def extract_file_changes(file_lines: List[str]) -> List[Dict[str, Union[str, int
         # Parse numstat line: <added> <deleted> <file>
         match = re.match(r"^(\d+|-)\s+(\d+|-)\s+(.+)$", line)
         if not match:
+            # Skip lines that don't match the numstat format
             continue
 
         added_str, deleted_str, file_path = match.groups()
@@ -180,7 +264,7 @@ def extract_file_changes(file_lines: List[str]) -> List[Dict[str, Union[str, int
         lines_deleted = 0 if deleted_str == "-" else int(deleted_str)
 
         # Handle renamed files
-        if "=>" in file_path:
+        if " => " in file_path:
             old_path, new_path = file_path.split(" => ")
             file_path = new_path.strip()
             old_path = old_path.strip()

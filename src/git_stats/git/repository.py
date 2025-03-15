@@ -117,7 +117,7 @@ def get_commit_history(
         "log",
         "--numstat",
         "--date=iso-strict",
-        "--pretty=format:%H%n%an%n%ae%n%ad%n%s%n%b%n---",
+        "--pretty=format:%H%nAuthor: %an <%ae>%nDate: %ad%n%n%s%n%b%n",
     ]
 
     # Add date range filters
