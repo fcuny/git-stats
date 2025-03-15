@@ -71,7 +71,6 @@ def execute(
         return 1
 
     # Get git log
-    console.print("[bold blue]Fetching git log...[/bold blue]")
     git_log = repository.get_commit_history(
         repo_path=repo_path,
         path=path,
@@ -81,12 +80,10 @@ def execute(
     )
 
     # Parse git log
-    console.print("[bold blue]Parsing git log...[/bold blue]")
     commits = parser.parse_git_log(git_log)
 
     # Filter by language if specified
     if language:
-        console.print(f"[bold blue]Filtering by language: {language}...[/bold blue]")
         commits = [
             commit
             for commit in commits
@@ -97,7 +94,6 @@ def execute(
         ]
 
     # Calculate author statistics
-    console.print("[bold blue]Calculating statistics...[/bold blue]")
     author_stats = {}
     for commit in commits:
         author = commit.author
@@ -120,7 +116,6 @@ def execute(
             author_stats[author]["last_commit_date"] = commit.date
 
     # Rank contributors
-    console.print("[bold blue]Ranking contributors...[/bold blue]")
     ranking = rank_contributors(author_stats, recency_period_months=recency_period)
 
     if output_format == OutputFormat.JSON:

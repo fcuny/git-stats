@@ -147,7 +147,6 @@ def execute(
 
     # If no files specified, use current diff
     if not files:
-        console.print("[bold blue]Detecting changed files...[/bold blue]")
         files = get_current_diff_files(repo_path)
         if not files:
             console.print(
@@ -169,12 +168,10 @@ def execute(
         return 1
 
     # Get experts for each file
-    console.print(f"[bold blue]Analyzing {len(valid_files)} files...[/bold blue]")
     file_experts = {}
     overall_scores = {}
 
     for file_path in valid_files:
-        console.print(f"[blue]Analyzing: {file_path}[/blue]")
         # Get experts for the file
         experts = get_file_experts(repo_path, file_path, recency_period)
         file_experts[file_path] = experts[:top]  # Limit to top N experts
