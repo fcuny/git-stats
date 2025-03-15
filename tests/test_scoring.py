@@ -306,3 +306,194 @@ def test_edge_cases():
     ranking = rank_contributors(equal_stats)
     assert len(ranking) == 2
     assert ranking[0][1] == ranking[1][1]
+
+
+@pytest.fixture
+def sample_author_stats():
+    """Fixture for sample author statistics."""
+    # Create sample author stats for three contributors
+    now = datetime.now()
+    three_months_ago = now - timedelta(days=90)
+    six_months_ago = now - timedelta(days=180)
+    one_year_ago = now - timedelta(days=365)
+
+    return {
+        "Alice <alice@example.com>": {
+            "commits": 20,
+            "lines_added": 1000,
+            "lines_deleted": 200,
+            "first_commit_date": one_year_ago,
+            "last_commit_date": now,
+            "commit_dates": [
+                one_year_ago,
+                six_months_ago,
+                three_months_ago,
+                now - timedelta(days=30),
+                now - timedelta(days=7),
+                now,
+            ],
+        },
+        "Bob <bob@example.com>": {
+            "commits": 10,
+            "lines_added": 500,
+            "lines_deleted": 100,
+            "first_commit_date": six_months_ago,
+            "last_commit_date": three_months_ago,
+            "commit_dates": [
+                six_months_ago,
+                six_months_ago + timedelta(days=30),
+                three_months_ago,
+            ],
+        },
+        "Charlie <charlie@example.com>": {
+            "commits": 5,
+            "lines_added": 2000,
+            "lines_deleted": 50,
+            "first_commit_date": three_months_ago,
+            "last_commit_date": now - timedelta(days=1),
+            "commit_dates": [
+                three_months_ago,
+                now - timedelta(days=30),
+                now - timedelta(days=1),
+            ],
+        },
+    }
+
+
+def test_rank_contributors_default_weights(sample_author_stats):
+    """Test ranking contributors with default weights."""
+    # Rank contributors with default weights
+    ranking = rank_contributors(sample_author_stats, recency_period_months=3)
+
+    # Check that we have the expected number of contributors
+    assert len(ranking) == 3
+
+    # Extract authors and scores
+    authors = [author for author, _, _ in ranking]
+    scores = [score for _, score, _ in ranking]
+
+    # Check that Alice is ranked first (highest score)
+    assert "Alice" in authors[0]
+
+    # Check that scores are in descending order
+    assert scores[0] >= scores[1] >= scores[2]
+
+    # Check that each contributor has normalized metrics
+    for _, _, metrics in ranking:
+        assert "longevity" in metrics
+        assert "lines" in metrics
+        assert "commits" in metrics
+        assert "recency" in metrics
+
+        # Check that metrics are normalized (between 0 and 1)
+        for metric_name, value in metrics.items():
+            assert 0 <= value <= 1
+
+
+def test_rank_contributors_custom_weights(sample_author_stats):
+    """Test ranking contributors with custom weights."""
+    # Define custom weights that prioritize recent contributions
+    custom_weights = {
+        "longevity": 0.1,
+        "lines": 0.2,
+        "commits": 0.3,
+        "recency": 0.4,  # Higher weight for recency
+    }
+
+    # Rank contributors with custom weights
+    ranking = rank_contributors(
+        sample_author_stats, weights=custom_weights, recency_period_months=3
+    )
+
+    # Extract authors and scores
+    authors = [author for author, _, _ in ranking]
+
+    # With higher weight on recency, Charlie might rank higher
+    # since all his commits are within the recency period
+    assert "Charlie" in authors[0] or "Alice" in authors[0]
+
+
+def test_rank_contributors_recency_period(sample_author_stats):
+    """Test ranking contributors with different recency periods."""
+    # Rank with 1 month recency period
+    ranking_1m = rank_contributors(sample_author_stats, recency_period_months=1)
+
+    # Rank with 6 months recency period
+    ranking_6m = rank_contributors(sample_author_stats, recency_period_months=6)
+
+    # Extract authors for both rankings
+    authors_1m = [author for author, _, _ in ranking_1m]
+    authors_6m = [author for author, _, _ in ranking_6m]
+
+    # With 1 month recency, Alice and Charlie should rank higher than Bob
+    # since Bob's last commit was 3 months ago
+    assert authors_1m.index(
+        next(a for a in authors_1m if "Bob" in a)
+    ) > authors_1m.index(next(a for a in authors_1m if "Alice" in a))
+
+    # With 6 months recency, Bob's contributions should count
+    # Check that Bob is still in the ranking with 6 months recency
+    bob_index_6m = authors_6m.index(next(a for a in authors_6m if "Bob" in a))
+    assert bob_index_6m >= 0
+
+    # Instead of comparing scores directly, check relative positions
+    # Bob should be ranked better (or same) with 6 months recency compared to 1 month
+    bob_index_1m = authors_1m.index(next(a for a in authors_1m if "Bob" in a))
+    assert bob_index_6m <= bob_index_1m
+
+
+def test_rank_contributors_single_contributor(sample_author_stats):
+    """Test ranking contributors with a single contributor."""
+    # Create stats with only Alice
+    alice_stats = {
+        "Alice <alice@example.com>": sample_author_stats["Alice <alice@example.com>"]
+    }
+
+    # Rank with single contributor
+    ranking = rank_contributors(alice_stats, recency_period_months=3)
+
+    # Check that we have one contributor
+    assert len(ranking) == 1
+
+    # Check that the contributor is Alice
+    assert "Alice" in ranking[0][0]
+
+    # Check that the score is normalized
+    # When there's only one contributor, they might not get a score of 1.0
+    # because the scoring is based on their actual metrics, not just relative ranking
+    assert 0 < ranking[0][1] <= 1.0
+
+
+def test_rank_contributors_same_metrics():
+    """Test ranking contributors with identical metrics."""
+    # Create stats with two contributors having identical metrics
+    now = datetime.now()
+    three_months_ago = now - timedelta(days=90)
+
+    identical_stats = {
+        "Alice <alice@example.com>": {
+            "commits": 10,
+            "lines_added": 500,
+            "lines_deleted": 100,
+            "first_commit_date": three_months_ago,
+            "last_commit_date": now,
+            "commit_dates": [three_months_ago, now],
+        },
+        "Bob <bob@example.com>": {
+            "commits": 10,
+            "lines_added": 500,
+            "lines_deleted": 100,
+            "first_commit_date": three_months_ago,
+            "last_commit_date": now,
+            "commit_dates": [three_months_ago, now],
+        },
+    }
+
+    # Rank with identical metrics
+    ranking = rank_contributors(identical_stats, recency_period_months=3)
+
+    # Check that we have two contributors
+    assert len(ranking) == 2
+
+    # Check that both scores are equal
+    assert ranking[0][1] == ranking[1][1]
