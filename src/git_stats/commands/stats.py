@@ -15,7 +15,6 @@ from git_stats.formatting import (
     create_console,
     create_score_bar,
     create_stats_table,
-    format_expertise_level,
     format_longevity,
     get_rank_style,
 )

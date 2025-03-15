@@ -2,7 +2,6 @@
 Tests for the formatting module.
 """
 
-import pytest
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table

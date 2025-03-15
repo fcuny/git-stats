@@ -9,7 +9,6 @@ import os
 from typing import Dict, List, Optional, Tuple
 
 from rich.console import Console
-from rich.text import Text
 
 from git_stats.config import OutputFormat
 from git_stats.formatting import (

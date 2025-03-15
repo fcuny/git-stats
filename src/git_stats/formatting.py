@@ -6,11 +6,10 @@ It includes console setup, table generation, color and style definitions.
 """
 
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Optional
 
 from rich.console import Console
 from rich.panel import Panel
-from rich.style import Style
 from rich.table import Table
 from rich.text import Text
 
