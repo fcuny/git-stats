@@ -116,7 +116,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         if args.command == "stats":
             console.print(
-                f"[bold]Generating contribution statistics...[/bold]", style="cyan"
+                "[bold]Generating contribution statistics...[/bold]", style="cyan"
             )
             return stats.execute(
                 repo_path=args.repo_path,
@@ -129,7 +129,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 console=console,
             )
         elif args.command == "dris":
-            console.print(f"[bold]Identifying code experts...[/bold]", style="cyan")
+            console.print("[bold]Identifying code experts...[/bold]", style="cyan")
             return dris.execute(
                 repo_path=args.repo_path,
                 recency_period=args.recency_period,
