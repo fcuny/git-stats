@@ -150,7 +150,7 @@ class TestGetCommitHistory:
             "log",
             "--numstat",
             "--date=iso-strict",
-            "--pretty=format:%H%nAuthor: %an <%ae>%nDate: %ad%n%n%s%n%b%n",
+            "--pretty=format:%H%nAuthor: %aN <%aE>%nDate: %ad%n%n%s%n%b%n",
             "--no-merges",
         )
 
@@ -188,7 +188,7 @@ class TestGetCommitHistory:
             "log",
             "--numstat",
             "--date=iso-strict",
-            "--pretty=format:%H%nAuthor: %an <%ae>%nDate: %ad%n%n%s%n%b%n",
+            "--pretty=format:%H%nAuthor: %aN <%aE>%nDate: %ad%n%n%s%n%b%n",
             "--no-merges",
             "--",
             "src/feature_x.py",
@@ -222,7 +222,7 @@ class TestGetCommitHistory:
             "log",
             "--numstat",
             "--date=iso-strict",
-            "--pretty=format:%H%nAuthor: %an <%ae>%nDate: %ad%n%n%s%n%b%n",
+            "--pretty=format:%H%nAuthor: %aN <%aE>%nDate: %ad%n%n%s%n%b%n",
             "--since",
             "2023-01-01",
             "--until",
