@@ -12,6 +12,7 @@ import os
 import sys
 from typing import List, Optional
 
+from git_stats import __version__
 from git_stats.commands import dris, stats
 from git_stats.config import OutputFormat
 from git_stats.formatting import create_console
@@ -22,6 +23,12 @@ def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="git-stats",
         description="Analyze Git repositories to generate statistics and identify code experts",
+        epilog="For more information and examples, visit: https://github.com/fcuny/git-stats",
+    )
+
+    # Add version information
+    parser.add_argument(
+        "--version", action="version", version=f"git-stats {__version__}"
     )
 
     # Global options
@@ -48,7 +55,9 @@ def create_parser() -> argparse.ArgumentParser:
 
     # Stats command
     stats_parser = subparsers.add_parser(
-        "stats", help="Generate contribution statistics for the repository"
+        "stats",
+        help="Generate contribution statistics for the repository",
+        description="Generate detailed contribution statistics for the repository, with options to filter by path, language, and date range.",
     )
     stats_parser.add_argument(
         "--path", help="Filter by specific directory or file path"
@@ -63,7 +72,9 @@ def create_parser() -> argparse.ArgumentParser:
 
     # DRIs command
     dris_parser = subparsers.add_parser(
-        "dris", help="Identify experts for specific files"
+        "dris",
+        help="Identify experts for specific files",
+        description="Identify Directly Responsible Individuals (experts) for specific files, useful for code reviews and knowledge sharing.",
     )
     dris_parser.add_argument("--files", help="Comma-separated list of files to analyze")
     dris_parser.add_argument(
@@ -89,35 +100,51 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Create console with rich formatting
     console = create_console()
 
+    # Display welcome message
+    console.print(
+        f"[bold]Git-Stats v{__version__}[/bold] - Analyzing Git repositories",
+        style="cyan",
+    )
+    console.print()
+
     # Convert output format string to enum
     output_format = OutputFormat.TEXT
     if args.output_format == "json":
         output_format = OutputFormat.JSON
 
     # Execute the appropriate command
-    if args.command == "stats":
-        return stats.execute(
-            repo_path=args.repo_path,
-            recency_period=args.recency_period,
-            output_format=output_format,
-            path=args.path,
-            language=args.language,
-            since=args.since,
-            until=args.until,
-            console=console,
-        )
-    elif args.command == "dris":
-        return dris.execute(
-            repo_path=args.repo_path,
-            recency_period=args.recency_period,
-            output_format=output_format,
-            files=args.files.split(",") if args.files else None,
-            top=args.top,
-            console=console,
-        )
-    else:
-        parser.print_help()
-        return 0
+    try:
+        if args.command == "stats":
+            console.print(
+                f"[bold]Generating contribution statistics...[/bold]", style="cyan"
+            )
+            return stats.execute(
+                repo_path=args.repo_path,
+                recency_period=args.recency_period,
+                output_format=output_format,
+                path=args.path,
+                language=args.language,
+                since=args.since,
+                until=args.until,
+                console=console,
+            )
+        elif args.command == "dris":
+            console.print(f"[bold]Identifying code experts...[/bold]", style="cyan")
+            return dris.execute(
+                repo_path=args.repo_path,
+                recency_period=args.recency_period,
+                output_format=output_format,
+                files=args.files.split(",") if args.files else None,
+                top=args.top,
+                console=console,
+            )
+        else:
+            parser.print_help()
+            return 0
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        console.print("[dim]For more help, run: git-stats --help[/dim]")
+        return 1
 
 
 if __name__ == "__main__":
