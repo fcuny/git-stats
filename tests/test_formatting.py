@@ -107,10 +107,6 @@ def test_create_stats_table():
     custom_table = create_stats_table(title="Custom Stats")
     assert custom_table.title == "Custom Stats"
 
-    # Test with sortable=False
-    non_sortable_table = create_stats_table(sortable=False)
-    assert non_sortable_table.caption is None
-
 
 def test_create_experts_table():
     """Test creating an experts table."""

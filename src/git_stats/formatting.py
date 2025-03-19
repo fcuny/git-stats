@@ -12,6 +12,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
+from rich import box
 
 
 # Color and style definitions
@@ -136,19 +137,17 @@ def create_score_bar(score: float, width: int = 10) -> Text:
 
 def create_stats_table(
     title: str = "Contribution Statistics",
-    sortable: bool = True,
 ) -> Table:
     """
     Create a table for contribution statistics.
 
     Args:
         title: The title of the table
-        sortable: Whether to make the table sortable
 
     Returns:
         Configured Table instance
     """
-    table = Table(title=title, title_style="bold", expand=True)
+    table = Table(title=title, title_style="bold", expand=True, box=box.ROUNDED)
 
     table.add_column("Rank", style=COLUMN_STYLES["rank"], width=6)
     table.add_column("Contributor", style=COLUMN_STYLES["contributor"])
@@ -157,10 +156,6 @@ def create_stats_table(
     table.add_column("Lines", justify="right")
     table.add_column("Longevity", justify="right")
     table.add_column("Recency", justify="right")
-
-    if sortable:
-        table.caption = "Click column headers to sort"
-        table.caption_style = "dim italic"
 
     return table
 

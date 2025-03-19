@@ -11,7 +11,6 @@ from rich.console import Console
 
 from git_stats.config import OutputFormat
 from git_stats.formatting import (
-    create_command_panel,
     create_console,
     create_score_bar,
     create_stats_table,
@@ -50,18 +49,6 @@ def execute(
     """
     if console is None:
         console = create_console()
-
-    # Display command parameters
-    parameters = {
-        "repository": repo_path,
-        "recency_period": f"{recency_period} months",
-        "output_format": output_format.name.lower(),
-        "path_filter": path,
-        "language_filter": language,
-        "since": since,
-        "until": until,
-    }
-    console.print(create_command_panel("Stats Command", "Git Stats", parameters))
 
     # Validate repository
     if not repository.validate_repo(repo_path):

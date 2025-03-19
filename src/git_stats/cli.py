@@ -100,13 +100,6 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Create console with rich formatting
     console = create_console()
 
-    # Display welcome message
-    console.print(
-        f"[bold]Git-Stats v{__version__}[/bold] - Analyzing Git repositories",
-        style="cyan",
-    )
-    console.print()
-
     # Convert output format string to enum
     output_format = OutputFormat.TEXT
     if args.output_format == "json":
@@ -115,9 +108,6 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Execute the appropriate command
     try:
         if args.command == "stats":
-            console.print(
-                "[bold]Generating contribution statistics...[/bold]", style="cyan"
-            )
             return stats.execute(
                 repo_path=args.repo_path,
                 recency_period=args.recency_period,
@@ -129,7 +119,6 @@ def main(argv: Optional[List[str]] = None) -> int:
                 console=console,
             )
         elif args.command == "dris":
-            console.print("[bold]Identifying code experts...[/bold]", style="cyan")
             return dris.execute(
                 repo_path=args.repo_path,
                 recency_period=args.recency_period,
